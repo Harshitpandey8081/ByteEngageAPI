@@ -1,0 +1,54 @@
+name: Deploy .NET 7 API to AWS EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ap-southeast-2
+
+    - name: Login to ECR
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build Docker image (.NET 7)
+      run: |
+        docker build -t byteengageapi .
+
+    - name: Tag image for ECR
+      run: |
+        docker tag byteengageapi:latest 200806799571.dkr.ecr.ap-southeast-2.amazonaws.com/api/byteengageapi:latest
+
+    - name: Push image to ECR
+      run: |
+        docker push 200806799571.dkr.ecr.ap-southeast-2.amazonaws.com/api/byteengageapi:latest
+
+    - name: Upload deploy script to EC2
+      uses: appleboy/scp-action@v0.1.4
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        source: "./deploy.sh"
+        target: "/home/ec2-user/deploy.sh"
+
+    - name: Run deployment on EC2
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          sudo bash /home/ec2-user/deploy.sh
